@@ -89,6 +89,14 @@ export function useAppState() {
     setState(defaultState);
   };
 
+  const importData = (skills: Skill[], activities: Activity[]) => {
+    setState(s => ({
+      ...s,
+      skills: [...s.skills, ...skills],
+      activities: [...s.activities, ...activities]
+    }));
+  };
+
   return {
     ...state,
     addSkill,
@@ -99,6 +107,7 @@ export function useAppState() {
     deleteActivity,
     addTimeLog,
     deleteTimeLog,
-    clearAll
+    clearAll,
+    importData
   };
 }
