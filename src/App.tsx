@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  Radar, RadarChart, PolarGrid, 
+  Radar, RadarChart, PolarGrid,
   PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer
 } from 'recharts';
 import { Plus, Clock, Target, Flame, BookOpen, Trash2, X, Pencil } from 'lucide-react';
@@ -11,6 +11,7 @@ import {
   calculateLevel, getSkillHours, getActivityHours,
   LEVEL_LABELS, PRIORITY_LABELS, TYPE_ICONS, STATUS_LABELS
 } from './utils';
+import OnboardingWizard from './components/OnboardingWizard';
 
 type Tab = 'radar' | 'skills' | 'activities';
 
@@ -19,7 +20,7 @@ export default function App() {
     skills, activities, timeLogs,
     addSkill, updateSkill, deleteSkill,
     addActivity, updateActivity, deleteActivity,
-    addTimeLog
+    addTimeLog, importData
   } = useAppState();
 
   const [tab, setTab] = useState<Tab>('radar');
@@ -28,12 +29,24 @@ export default function App() {
 
   // Form state
   const [skillForm, setSkillForm] = useState({ name: '', targetLevel: 3, priority: 2 as 1|2|3 });
-  const [activityForm, setActivityForm] = useState<Omit<Activity, 'id'>>({ 
-    name: '', type: 'course', status: 'planned', skills: [] 
+  const [activityForm, setActivityForm] = useState<Omit<Activity, 'id'>>({
+    name: '', type: 'course', status: 'planned', skills: []
   });
-  const [timeForm, setTimeForm] = useState({ 
-    activityId: 0, hours: 1, date: new Date().toISOString().split('T')[0] 
+  const [timeForm, setTimeForm] = useState({
+    activityId: 0, hours: 1, date: new Date().toISOString().split('T')[0]
   });
+
+  // Show onboarding if no skills yet
+  const [showOnboarding, setShowOnboarding] = useState(skills.length === 0);
+
+  const handleOnboardingComplete = (newSkills: Skill[], newActivities: Activity[]) => {
+    importData(newSkills, newActivities);
+    setShowOnboarding(false);
+  };
+
+  if (showOnboarding) {
+    return <OnboardingWizard onComplete={handleOnboardingComplete} />;
+  }
 
   // Radar data
   const radarData = skills.map(skill => {
