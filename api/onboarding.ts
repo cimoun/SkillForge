@@ -1,4 +1,6 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+export const config = {
+  runtime: 'edge',
+};
 
 interface OnboardingSkill {
   name: string;
@@ -42,53 +44,61 @@ const SYSTEM_PROMPT = `Ты — эксперт по обучению и разв
   ]
 }`;
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // CORS headers
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+export default async function handler(req: Request): Promise<Response> {
+  const headers = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET,OPTIONS,POST',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Content-Type': 'application/json',
+  };
 
   if (req.method === 'OPTIONS') {
-    return res.status(200).end();
+    return new Response(null, { status: 200, headers });
   }
 
   if (req.method === 'GET') {
-    return res.status(200).json({ status: 'ok', message: 'Use POST with userGoal' });
+    return new Response(
+      JSON.stringify({ status: 'ok', message: 'Use POST with userGoal' }),
+      { status: 200, headers }
+    );
   }
 
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
-  const { userGoal } = req.body;
-
-  if (!userGoal || typeof userGoal !== 'string') {
-    return res.status(400).json({ error: 'userGoal is required' });
-  }
-
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    return res.status(500).json({ error: 'GEMINI_API_KEY is not configured' });
+    return new Response(
+      JSON.stringify({ error: 'Method not allowed' }),
+      { status: 405, headers }
+    );
   }
 
   try {
+    const body = await req.json();
+    const userGoal = body?.userGoal;
+
+    if (!userGoal || typeof userGoal !== 'string') {
+      return new Response(
+        JSON.stringify({ error: 'userGoal is required' }),
+        { status: 400, headers }
+      );
+    }
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return new Response(
+        JSON.stringify({ error: 'GEMINI_API_KEY is not configured' }),
+        { status: 500, headers }
+      );
+    }
+
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [
             {
               role: 'user',
-              parts: [
-                {
-                  text: `${SYSTEM_PROMPT}\n\nЦель пользователя: ${userGoal}`,
-                },
-              ],
+              parts: [{ text: `${SYSTEM_PROMPT}\n\nЦель пользователя: ${userGoal}` }],
             },
           ],
           generationConfig: {
@@ -101,74 +111,74 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     );
 
     if (!response.ok) {
-      const errorData = await response.text();
-      console.error('Gemini API error:', response.status, errorData);
-
-      // Parse error message from Gemini
-      try {
-        const errorJson = JSON.parse(errorData);
-        const message = errorJson.error?.message || 'Gemini API error';
-        return res.status(500).json({ error: message });
-      } catch {
-        return res.status(500).json({ error: `Gemini API error: ${response.status}` });
-      }
+      const errorText = await response.text();
+      console.error('Gemini API error:', response.status, errorText);
+      return new Response(
+        JSON.stringify({ error: `Gemini API error: ${response.status}` }),
+        { status: 500, headers }
+      );
     }
 
     const data = await response.json();
-
-    // Extract text from Gemini response
     const textContent = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
     if (!textContent) {
-      return res.status(500).json({ error: 'Empty response from Gemini' });
+      return new Response(
+        JSON.stringify({ error: 'Empty response from Gemini' }),
+        { status: 500, headers }
+      );
     }
 
-    // Parse JSON from response
     let parsed: OnboardingResponse;
     try {
-      // Clean up potential markdown formatting
       const cleanJson = textContent.replace(/```json\n?|\n?```/g, '').trim();
       parsed = JSON.parse(cleanJson);
-    } catch (parseError) {
-      console.error('Failed to parse Gemini response:', textContent);
-      return res.status(500).json({ error: 'Failed to parse AI response' });
+    } catch {
+      console.error('Failed to parse:', textContent);
+      return new Response(
+        JSON.stringify({ error: 'Failed to parse AI response' }),
+        { status: 500, headers }
+      );
     }
 
-    // Validate response structure
     if (!Array.isArray(parsed.skills) || !Array.isArray(parsed.activities)) {
-      return res.status(500).json({ error: 'Invalid response structure from AI' });
+      return new Response(
+        JSON.stringify({ error: 'Invalid response structure' }),
+        { status: 500, headers }
+      );
     }
 
-    // Validate and sanitize skills
     const validSkills = parsed.skills
-      .filter(s => s.name && typeof s.name === 'string')
-      .map(s => ({
+      .filter((s) => s.name && typeof s.name === 'string')
+      .map((s) => ({
         name: s.name.trim(),
         targetLevel: Math.min(5, Math.max(1, Number(s.targetLevel) || 3)),
         priority: ([1, 2, 3].includes(s.priority) ? s.priority : 2) as 1 | 2 | 3,
       }));
 
-    // Validate and sanitize activities
     const validTypes = ['course', 'book', 'practice', 'project', 'article'];
-    const skillNames = new Set(validSkills.map(s => s.name));
+    const skillNames = new Set(validSkills.map((s) => s.name));
 
     const validActivities = parsed.activities
-      .filter(a => a.name && typeof a.name === 'string')
-      .map(a => ({
+      .filter((a) => a.name && typeof a.name === 'string')
+      .map((a) => ({
         name: a.name.trim(),
         type: (validTypes.includes(a.type) ? a.type : 'course') as OnboardingActivity['type'],
         skillNames: Array.isArray(a.skillNames)
-          ? a.skillNames.filter(sn => skillNames.has(sn))
+          ? a.skillNames.filter((sn) => skillNames.has(sn))
           : [],
       }))
-      .filter(a => a.skillNames.length > 0);
+      .filter((a) => a.skillNames.length > 0);
 
-    return res.status(200).json({
-      skills: validSkills,
-      activities: validActivities,
-    });
+    return new Response(
+      JSON.stringify({ skills: validSkills, activities: validActivities }),
+      { status: 200, headers }
+    );
   } catch (error) {
     console.error('Onboarding error:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+    return new Response(
+      JSON.stringify({ error: 'Internal server error' }),
+      { status: 500, headers }
+    );
   }
 }
