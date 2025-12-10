@@ -58,7 +58,7 @@ export default async function handler(req: Request): Promise<Response> {
 
   if (req.method === 'GET') {
     return new Response(
-      JSON.stringify({ status: 'ok', message: 'Use POST with userGoal', provider: 'Groq' }),
+      JSON.stringify({ status: 'ok', message: 'Use POST with userGoal', provider: 'OpenRouter' }),
       { status: 200, headers }
     );
   }
@@ -81,23 +81,25 @@ export default async function handler(req: Request): Promise<Response> {
       );
     }
 
-    const apiKey = process.env.GROQ_API_KEY;
+    const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) {
       return new Response(
-        JSON.stringify({ error: 'GROQ_API_KEY is not configured' }),
+        JSON.stringify({ error: 'OPENROUTER_API_KEY is not configured' }),
         { status: 500, headers }
       );
     }
 
-    // Groq API (OpenAI-compatible format)
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    // OpenRouter API (OpenAI-compatible)
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
+        'HTTP-Referer': 'https://skillforge.vercel.app',
+        'X-Title': 'SkillForge',
       },
       body: JSON.stringify({
-        model: 'llama-3.1-70b-versatile',
+        model: 'meta-llama/llama-3.1-8b-instruct:free',
         messages: [
           {
             role: 'system',
@@ -110,15 +112,14 @@ export default async function handler(req: Request): Promise<Response> {
         ],
         temperature: 0.7,
         max_tokens: 2048,
-        response_format: { type: 'json_object' },
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Groq API error:', response.status, errorText);
+      console.error('OpenRouter API error:', response.status, errorText);
       return new Response(
-        JSON.stringify({ error: `Groq API error: ${response.status}` }),
+        JSON.stringify({ error: `OpenRouter API error: ${response.status}` }),
         { status: 500, headers }
       );
     }
@@ -128,14 +129,16 @@ export default async function handler(req: Request): Promise<Response> {
 
     if (!textContent) {
       return new Response(
-        JSON.stringify({ error: 'Empty response from Groq' }),
+        JSON.stringify({ error: 'Empty response from OpenRouter' }),
         { status: 500, headers }
       );
     }
 
     let parsed: OnboardingResponse;
     try {
-      const cleanJson = textContent.replace(/```json\n?|\n?```/g, '').trim();
+      // Extract JSON from response (may be wrapped in markdown)
+      const jsonMatch = textContent.match(/\{[\s\S]*\}/);
+      const cleanJson = jsonMatch ? jsonMatch[0] : textContent;
       parsed = JSON.parse(cleanJson);
     } catch {
       console.error('Failed to parse:', textContent);
