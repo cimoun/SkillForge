@@ -1,4 +1,4 @@
-import { Skill, Activity, TimeLog } from '../types';
+import { Activity, TimeLog } from '../types';
 
 export const LEVEL_THRESHOLDS = [0, 1, 11, 41, 101, 251];
 

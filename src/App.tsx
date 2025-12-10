@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
   Radar, RadarChart, PolarGrid, 
   PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer
 } from 'recharts';
-import { Plus, Clock, Target, Flame, BookOpen, Trash2, X } from 'lucide-react';
+import { Plus, Clock, Target, Flame, BookOpen, Trash2, X, Pencil } from 'lucide-react';
 
 import { useAppState } from './hooks/useAppState';
 import { Skill, Activity } from './types';
@@ -17,13 +17,14 @@ type Tab = 'radar' | 'skills' | 'activities';
 export default function App() {
   const {
     skills, activities, timeLogs,
-    addSkill, deleteSkill,
+    addSkill, updateSkill, deleteSkill,
     addActivity, updateActivity, deleteActivity,
     addTimeLog
   } = useAppState();
 
   const [tab, setTab] = useState<Tab>('radar');
-  const [modal, setModal] = useState<'skill' | 'activity' | 'time' | null>(null);
+  const [modal, setModal] = useState<'skill' | 'activity' | 'time' | 'edit-skill' | 'edit-activity' | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
 
   // Form state
   const [skillForm, setSkillForm] = useState({ name: '', targetLevel: 3, priority: 2 as 1|2|3 });
@@ -95,6 +96,47 @@ export default function App() {
   const cycleStatus = (id: number, current: string) => {
     const next = { planned: 'active', active: 'completed', completed: 'planned' } as const;
     updateActivity(id, { status: next[current as keyof typeof next] });
+  };
+
+  // Edit handlers
+  const openEditSkill = (skill: Skill) => {
+    setSkillForm({ name: skill.name, targetLevel: skill.targetLevel, priority: skill.priority });
+    setEditingId(skill.id);
+    setModal('edit-skill');
+  };
+
+  const handleEditSkill = () => {
+    if (!skillForm.name.trim() || !editingId) return;
+    updateSkill(editingId, skillForm);
+    setSkillForm({ name: '', targetLevel: 3, priority: 2 });
+    setEditingId(null);
+    setModal(null);
+  };
+
+  const openEditActivity = (activity: Activity) => {
+    setActivityForm({
+      name: activity.name,
+      type: activity.type,
+      status: activity.status,
+      skills: activity.skills
+    });
+    setEditingId(activity.id);
+    setModal('edit-activity');
+  };
+
+  const handleEditActivity = () => {
+    if (!activityForm.name.trim() || !editingId) return;
+    updateActivity(editingId, activityForm);
+    setActivityForm({ name: '', type: 'course', status: 'planned', skills: [] });
+    setEditingId(null);
+    setModal(null);
+  };
+
+  const closeModal = () => {
+    setModal(null);
+    setEditingId(null);
+    setSkillForm({ name: '', targetLevel: 3, priority: 2 });
+    setActivityForm({ name: '', type: 'course', status: 'planned', skills: [] });
   };
 
   return (
@@ -255,12 +297,20 @@ export default function App() {
                             {PRIORITY_LABELS[skill.priority]}
                           </span>
                         </div>
-                        <button 
-                          onClick={() => deleteSkill(skill.id)}
-                          className="text-zinc-600 hover:text-red-400"
-                        >
-                          <Trash2 size={16} />
-                        </button>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => openEditSkill(skill)}
+                            className="text-zinc-600 hover:text-orange-400"
+                          >
+                            <Pencil size={16} />
+                          </button>
+                          <button
+                            onClick={() => deleteSkill(skill.id)}
+                            className="text-zinc-600 hover:text-red-400"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
                       </div>
                       
                       <div className="text-sm text-zinc-400 mb-2">
@@ -326,7 +376,13 @@ export default function App() {
                           >
                             {STATUS_LABELS[activity.status]}
                           </button>
-                          <button 
+                          <button
+                            onClick={() => openEditActivity(activity)}
+                            className="text-zinc-600 hover:text-orange-400"
+                          >
+                            <Pencil size={16} />
+                          </button>
+                          <button
                             onClick={() => deleteActivity(activity.id)}
                             className="text-zinc-600 hover:text-red-400"
                           >
@@ -351,8 +407,8 @@ export default function App() {
       {modal && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
           <div className="bg-zinc-900 rounded-xl p-6 w-full max-w-md relative">
-            <button 
-              onClick={() => setModal(null)}
+            <button
+              onClick={closeModal}
               className="absolute top-4 right-4 text-zinc-500 hover:text-zinc-300"
             >
               <X size={20} />
@@ -532,6 +588,148 @@ export default function App() {
                   >
                     Сохранить
                   </button>
+                </div>
+              </>
+            )}
+
+            {/* Edit Skill */}
+            {modal === 'edit-skill' && (
+              <>
+                <h3 className="text-lg font-medium mb-4">Редактировать навык</h3>
+                <div className="space-y-4">
+                  <input
+                    type="text"
+                    placeholder="Название"
+                    value={skillForm.name}
+                    onChange={e => setSkillForm({ ...skillForm, name: e.target.value })}
+                    className="w-full bg-zinc-800 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  />
+                  <div>
+                    <label className="text-sm text-zinc-400 block mb-2">
+                      Цель: {skillForm.targetLevel} ({LEVEL_LABELS[skillForm.targetLevel]})
+                    </label>
+                    <input
+                      type="range"
+                      min="1"
+                      max="5"
+                      value={skillForm.targetLevel}
+                      onChange={e => setSkillForm({ ...skillForm, targetLevel: +e.target.value })}
+                      className="w-full accent-orange-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm text-zinc-400 block mb-2">Приоритет</label>
+                    <div className="flex gap-2">
+                      {[1, 2, 3].map(p => (
+                        <button
+                          key={p}
+                          onClick={() => setSkillForm({ ...skillForm, priority: p as 1|2|3 })}
+                          className={`flex-1 py-2 rounded-lg text-sm transition ${
+                            skillForm.priority === p
+                              ? 'bg-orange-600 text-white'
+                              : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                          }`}
+                        >
+                          {PRIORITY_LABELS[p]}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={closeModal}
+                      className="flex-1 bg-zinc-800 hover:bg-zinc-700 py-2.5 rounded-lg font-medium transition"
+                    >
+                      Отмена
+                    </button>
+                    <button
+                      onClick={handleEditSkill}
+                      className="flex-1 bg-orange-600 hover:bg-orange-500 py-2.5 rounded-lg font-medium transition"
+                    >
+                      Сохранить
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* Edit Activity */}
+            {modal === 'edit-activity' && (
+              <>
+                <h3 className="text-lg font-medium mb-4">Редактировать активность</h3>
+                <div className="space-y-4">
+                  <input
+                    type="text"
+                    placeholder="Название"
+                    value={activityForm.name}
+                    onChange={e => setActivityForm({ ...activityForm, name: e.target.value })}
+                    className="w-full bg-zinc-800 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  />
+                  <div>
+                    <label className="text-sm text-zinc-400 block mb-2">Тип</label>
+                    <div className="grid grid-cols-5 gap-2">
+                      {Object.entries(TYPE_ICONS).map(([type, icon]) => (
+                        <button
+                          key={type}
+                          onClick={() => setActivityForm({ ...activityForm, type: type as Activity['type'] })}
+                          className={`py-2 rounded-lg text-lg transition ${
+                            activityForm.type === type
+                              ? 'bg-orange-600'
+                              : 'bg-zinc-800 hover:bg-zinc-700'
+                          }`}
+                          title={type}
+                        >
+                          {icon}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {skills.length > 0 && (
+                    <div>
+                      <label className="text-sm text-zinc-400 block mb-2">Связь с навыками</label>
+                      <div className="space-y-2 max-h-40 overflow-y-auto">
+                        {skills.map(skill => {
+                          const link = activityForm.skills.find(s => s.skillId === skill.id);
+                          return (
+                            <div key={skill.id} className="flex items-center gap-3 bg-zinc-800 rounded-lg p-2">
+                              <input
+                                type="checkbox"
+                                checked={!!link}
+                                onChange={() => toggleSkillLink(skill.id)}
+                                className="accent-orange-500"
+                              />
+                              <span className="flex-1 text-sm">{skill.name}</span>
+                              {link && (
+                                <input
+                                  type="number"
+                                  min="0.1"
+                                  max="1"
+                                  step="0.1"
+                                  value={link.weight}
+                                  onChange={e => updateWeight(skill.id, +e.target.value)}
+                                  className="w-16 bg-zinc-700 rounded px-2 py-1 text-sm text-center"
+                                />
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={closeModal}
+                      className="flex-1 bg-zinc-800 hover:bg-zinc-700 py-2.5 rounded-lg font-medium transition"
+                    >
+                      Отмена
+                    </button>
+                    <button
+                      onClick={handleEditActivity}
+                      className="flex-1 bg-orange-600 hover:bg-orange-500 py-2.5 rounded-lg font-medium transition"
+                    >
+                      Сохранить
+                    </button>
+                  </div>
                 </div>
               </>
             )}
