@@ -58,7 +58,7 @@ export default async function handler(req: Request): Promise<Response> {
 
   if (req.method === 'GET') {
     return new Response(
-      JSON.stringify({ status: 'ok', message: 'Use POST with userGoal' }),
+      JSON.stringify({ status: 'ok', message: 'Use POST with userGoal', provider: 'OpenRouter' }),
       { status: 200, headers }
     );
   }
@@ -81,57 +81,64 @@ export default async function handler(req: Request): Promise<Response> {
       );
     }
 
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) {
       return new Response(
-        JSON.stringify({ error: 'GEMINI_API_KEY is not configured' }),
+        JSON.stringify({ error: 'OPENROUTER_API_KEY is not configured' }),
         { status: 500, headers }
       );
     }
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [
-            {
-              role: 'user',
-              parts: [{ text: `${SYSTEM_PROMPT}\n\nЦель пользователя: ${userGoal}` }],
-            },
-          ],
-          generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 2048,
-            responseMimeType: 'application/json',
+    // OpenRouter API (OpenAI-compatible)
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        'HTTP-Referer': 'https://skillforge.vercel.app',
+        'X-Title': 'SkillForge',
+      },
+      body: JSON.stringify({
+        model: 'meta-llama/llama-3.1-8b-instruct:free',
+        messages: [
+          {
+            role: 'system',
+            content: SYSTEM_PROMPT,
           },
-        }),
-      }
-    );
+          {
+            role: 'user',
+            content: `Цель пользователя: ${userGoal}`,
+          },
+        ],
+        temperature: 0.7,
+        max_tokens: 2048,
+      }),
+    });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Gemini API error:', response.status, errorText);
+      console.error('OpenRouter API error:', response.status, errorText);
       return new Response(
-        JSON.stringify({ error: `Gemini API error: ${response.status}` }),
+        JSON.stringify({ error: `OpenRouter API error: ${response.status}` }),
         { status: 500, headers }
       );
     }
 
     const data = await response.json();
-    const textContent = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    const textContent = data.choices?.[0]?.message?.content;
 
     if (!textContent) {
       return new Response(
-        JSON.stringify({ error: 'Empty response from Gemini' }),
+        JSON.stringify({ error: 'Empty response from OpenRouter' }),
         { status: 500, headers }
       );
     }
 
     let parsed: OnboardingResponse;
     try {
-      const cleanJson = textContent.replace(/```json\n?|\n?```/g, '').trim();
+      // Extract JSON from response (may be wrapped in markdown)
+      const jsonMatch = textContent.match(/\{[\s\S]*\}/);
+      const cleanJson = jsonMatch ? jsonMatch[0] : textContent;
       parsed = JSON.parse(cleanJson);
     } catch {
       console.error('Failed to parse:', textContent);
