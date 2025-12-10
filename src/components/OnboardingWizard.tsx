@@ -51,13 +51,24 @@ export default function OnboardingWizard({ onComplete }: Props) {
         body: JSON.stringify({ userGoal: userGoal.trim() }),
       });
 
+      const text = await response.text();
+      let data;
+
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error('Сервер вернул некорректный ответ');
+      }
+
       if (!response.ok) {
-        const data = await response.json();
         throw new Error(data.error || 'Ошибка при генерации плана');
       }
 
-      const data: OnboardingResult = await response.json();
-      setResult(data);
+      if (!data.skills || !data.activities) {
+        throw new Error('Некорректная структура ответа от AI');
+      }
+
+      setResult(data as OnboardingResult);
       setStep('review');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Произошла ошибка');
