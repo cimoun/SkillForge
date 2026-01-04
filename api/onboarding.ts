@@ -58,7 +58,7 @@ export default async function handler(req: Request): Promise<Response> {
 
   if (req.method === 'GET') {
     return new Response(
-      JSON.stringify({ status: 'ok', message: 'Use POST with userGoal', provider: 'OpenRouter' }),
+      JSON.stringify({ status: 'ok', message: 'Use POST with userGoal', provider: 'OpenRouter', model: 'Claude Sonnet 4' }),
       { status: 200, headers }
     );
   }
@@ -99,7 +99,7 @@ export default async function handler(req: Request): Promise<Response> {
         'X-Title': 'SkillForge',
       },
       body: JSON.stringify({
-        model: 'meta-llama/llama-3.2-3b-instruct:free',
+        model: 'anthropic/claude-sonnet-4',
         messages: [
           {
             role: 'system',
@@ -111,7 +111,7 @@ export default async function handler(req: Request): Promise<Response> {
           },
         ],
         temperature: 0.7,
-        max_tokens: 2048,
+        max_tokens: 4096,
       }),
     });
 
